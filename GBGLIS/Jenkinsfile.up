@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    environment {
+        DEPLOY_HOST = '192.168.161.240'
+        DOMAIN = 'gbglis.xyz'
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/master']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'infra']],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [[url: 'https://github.com/dimagv/gbglis-infra.git']]])
+            }
+        }
+
+        
+        stage('Copy scripts') {
+            steps {
+                sshagent (credentials: ["${DEPLOY_HOST}", "tfs"]) {
+                    sh "scp -o StrictHostKeyChecking=no -r ./infra ironjab@${DEPLOY_HOST}:/tmp/up-${env.BRANCH_NAME}"
+                }
+            }
+        }
+
+        stage('Deploy branch') {
+            steps {
+                script {
+                    def tfsUser, tfsPAT
+               
+                    withCredentials([usernamePassword(credentialsId: 'tfs-pat', usernameVariable: 'USERNAME', passwordVariable: 'PAT')]) {
+                        tfsUser = env.USERNAME
+                        tfsPAT = env.PAT
+                    } 
+
+                    sshagent (credentials: ["${DEPLOY_HOST}"]) {    
+                        sh "ssh -o StrictHostKeyChecking=no -l ironjab ${DEPLOY_HOST} ' \
+                            sudo /tmp/up-${env.BRANCH_NAME}/up.sh \"${env.BRANCH_NAME}\" ${DOMAIN} $tfsUser $tfsPAT \
+                        '"
+                    }
+                }
+            }
+        }
+    }
+
+    post { 
+        always { 
+            sshagent (credentials: ["${DEPLOY_HOST}"]) {    
+                sh "ssh -o StrictHostKeyChecking=no -l ironjab ${DEPLOY_HOST} ' \
+                    rm -rf /tmp/up-${env.BRANCH_NAME} \
+                '"
+            }  
+        }
+        
+        //failure { 
+        //    build "/GBGLIS-DOWN/${env.BRANCH_NAME}"
+        //}
+    }
+}

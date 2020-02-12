@@ -1,0 +1,12 @@
+FROM microsoft/dotnet:sdk AS build-env
+WORKDIR /app/LIS.Identity/LIS.AuthServise
+COPY . /app
+RUN dotnet restore
+RUN dotnet publish -c Release -o out
+
+FROM microsoft/dotnet:aspnetcore-runtime
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:44364
+ENV ASPNETCORE_ENVIRONMENT=Development
+COPY --from=build-env /app/LIS.Identity/LIS.AuthServise/out .
+ENTRYPOINT ["dotnet", "LIS.AuthServise.dll"]

@@ -1,0 +1,80 @@
+def shouldBuild = true
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        parallelsAlwaysFailFast()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    environment {
+        REPO_API = 'gbglis/gbglis-api'
+        REPO_IDENTITY = 'gbglis/gbglis-identity'
+        REPO_WEB = 'gbglis/gbglis-web'
+        DEPLOY_HOST = '192.168.161.240'
+        DOMAIN = 'gbglis.xyz'
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: "Ignore [ci-skip] commit prefix")
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                script {    
+                    shouldBuild = params.FORCE_BUILD || sh(script: "git log -1 | grep '.*\\[ci-skip\\].*'", returnStatus: true) 
+                }
+
+                checkout scm
+            }
+        }
+
+        stage('Parallel Build') {
+            when { expression { shouldBuild } }
+            parallel {
+                stage('Build/Push API') {
+                    steps {
+                        script {
+                            docker.build("${REPO_API}:${env.BRANCH_NAME}", ".")
+                        }
+                    }
+                }
+
+                stage('Build/Push Identity') {
+                    steps {
+                        script {
+                            docker.build("${REPO_IDENTITY}:${env.BRANCH_NAME}", "-f Dockerfile.identity .")
+                        }
+                    }
+                }
+
+                stage('Build/Push WEB') {
+                    steps {
+                        script {
+                            //docker.build("${REPO_WEB}:${env.BRANCH_NAME}", "--build-arg DOMAIN=${DOMAIN} --build-arg BRANCH=${env.BRANCH_NAME} ./LIS.Web")
+                            docker.build("${REPO_WEB}:${env.BRANCH_NAME}", "./LIS.Web")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            when { expression { shouldBuild } }
+            steps {
+                sshagent (credentials: ["${DEPLOY_HOST}"]) {
+                    sh "ssh -o StrictHostKeyChecking=no -l ironjab ${DEPLOY_HOST} ' \
+                        cd '/home/ironjab/gbglis/${env.BRANCH_NAME}'; \
+                        docker-compose down; \
+                        docker-compose up -d; \
+                    '"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,13 @@
+version: "2.2"
+services:
+  nginx:
+    image: nginx
+    container_name: global-nginx
+    network_mode: host
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always

@@ -1,0 +1,16 @@
+export const environment = {
+    production: true,
+    hmr       : false,
+    apiEndpoint: 'https://{{BRANCH}}-api.{{DOMAIN}}/api',
+    authConfig: {
+        stsServer: 'https://{{BRANCH}}-identity.{{DOMAIN}}',
+        redirect_url: 'https://{{BRANCH}}.{{DOMAIN}}',
+        client_id: 'native.code',
+        scope: 'openid profile native_api',
+        response_type: 'code',
+        post_login_route: '/test-management',
+        forbidden_route: '/test-management',
+        unauthorized_route: '/test-management'
+    },
+    mdlEndpoint:'http://192.168.160.197:92',
+};
